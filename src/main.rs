@@ -1,12 +1,10 @@
 use yew::{Html, function_component, html, use_memo};
 use yew_icons::{Icon, IconId};
 
-use crate::pie::SkillPieChart;
+use crate::pie::{SetPieChart, SkillPieChart};
 
 mod data;
 mod pie;
-
-
 
 #[function_component(App)]
 fn app() -> Html {
@@ -27,19 +25,46 @@ fn app() -> Html {
         })
         .collect();
 
+    let set_charts: Html = (1..28)
+        .map(|i| {
+            html! {
+                <SetPieChart
+                    master_table={master_table.clone()}
+                    partitions={vec![i]}
+                    top_n={12}
+                    chart_id={format!("topsets_{}", i)}
+                    width={500}
+                    height={300}
+                />
+            }
+        })
+        .collect();
+
     html! {
         <div style=r#"display: flex; justify-content: center; align-items: center; flex-direction: row; flex-wrap: wrap; color: #fff;"#>
-            <div style=r#"font-size: 4rem; margin: 1rem; font-weight: bold; user-select: none; width: 100%; text-align: center;"#>{"Syrup Stats - Get sticky with it"}</div>
+            <div style=r#"font-size: 4rem; margin: 1rem; font-weight: bold; user-select: none; width: 100%; text-align: center;"#>{"ESO Raid Stats"}</div>
             <SkillPieChart
                     master_table={master_table.clone()}
                     partitions={vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]}
-                    top_n={50}
+                    top_n={75}
                     chart_id={format!("topskills_all")}
                     width={1500}
                     height={900}
             />
+            <div style=r#"font-size: 2rem; margin: 1rem; font-weight: bold; user-select: none; width: 100%; text-align: center;"#>{"Top 12 Most Frequently Used Skills"}</div>
             {skill_charts}
-            
+
+            <div style=r#"font-size: 2rem; margin: 1rem; font-weight: bold; user-select: none; width: 100%; text-align: center;"#>{"Sets"}</div>
+            <SetPieChart
+                master_table={master_table.clone()}
+                partitions={vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]}
+                top_n={50}
+                chart_id={format!("topsets_all")}
+                width={1500}
+                height={900}
+            />
+            {set_charts}
+
             <div style="position: fixed; bottom: 1em; right: 1em; display: flex; gap: 1em; z-index: 999;">
                 <a
                     href={"https://discord.gg/FjJjXHjUQ4"}

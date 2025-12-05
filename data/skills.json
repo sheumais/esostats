@@ -871,19 +871,19 @@
     },
     "145": {
       "fileName": "ability_sorcerer_endless_atronachs.png",
-      "skillName": "Summon Charged Atronach",
+      "skillName": "Charged Atronach",
       "skillClass": "Sorcerer",
       "skillTree": "Daedric Summoning"
     },
     "146": {
       "fileName": "ability_sorcerer_unstable_clannfear.png",
-      "skillName": "Summon Unstable Clannfear",
+      "skillName": "Unstable Clannfear",
       "skillClass": "Sorcerer",
       "skillTree": "Daedric Summoning"
     },
     "147": {
       "fileName": "ability_sorcerer_speedy_familiar.png",
-      "skillName": "Summon Volatile Familiar",
+      "skillName": "Volatile Familiar",
       "skillClass": "Sorcerer",
       "skillTree": "Daedric Summoning"
     },
@@ -901,13 +901,13 @@
     },
     "150": {
       "fileName": "ability_sorcerer_storm_prey.png",
-      "skillName": "Summon Twilight Matriarch",
+      "skillName": "Twilight Matriarch",
       "skillClass": "Sorcerer",
       "skillTree": "Daedric Summoning"
     },
     "151": {
       "fileName": "ability_sorcerer_lightning_matriarch.png",
-      "skillName": "Summon Twilight Tormentor",
+      "skillName": "Twilight Tormentor",
       "skillClass": "Sorcerer",
       "skillTree": "Daedric Summoning"
     },
@@ -1615,13 +1615,13 @@
     },
     "269": {
       "fileName": "ability_destructionstaff_002a.png",
-      "skillName": "Unstable Wall of Fire",
+      "skillName": "Blockade of Fire",
       "skillClass": "Weapon",
       "skillTree": "Destruction Staff"
     },
     "270": {
       "fileName": "ability_destructionstaff_002b.png",
-      "skillName": "Blockade of Fire",
+      "skillName": "Unstable Wall of Fire",
       "skillClass": "Weapon",
       "skillTree": "Destruction Staff"
     },

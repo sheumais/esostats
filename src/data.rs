@@ -258,8 +258,6 @@ pub fn parse_set_data_into_hashmap() -> HashMap<u16, &'static str> {
 
     lookup_table
 }
-
-
 pub fn parse_set_ids_into_hashmap() -> HashMap<u32, u16> {
     let mut lookup_table: HashMap<u32, u16> = HashMap::new();
     let data = include_str!("../data/set_ids.csv");
@@ -323,21 +321,59 @@ pub struct SkillMetadata {
     pub skillTree: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct ItemSet {
+    pub id: u16,
+    pub name: String,
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct MasterTable {
     pub rows: Vec<TableRow>,
     pub players: Vec<Player>,
     pub skills: Vec<Skill>,
+    pub sets: Vec<ItemSet>,
 }
 
 pub fn process_data_into_master_table_serialized() {
     let set_id_hashmap = parse_set_ids_into_hashmap();
 
+    // read input CSVs
     let csv_text = std::fs::read_to_string("data/total_dps.csv").unwrap();
     let csv_text_2 = std::fs::read_to_string("data/boss_dps.csv").unwrap();
 
     let rows_total_dps = parse_csv_text(&csv_text).unwrap();
     let rows_boss_dps = parse_csv_text(&csv_text_2).unwrap();
+
+    let set_csv_text = std::fs::read_to_string("data/set_data.csv")
+        .expect("failed to read ../data/set_data.csv");
+    let mut sets_vec: Vec<ItemSet> = Vec::new();
+    for (line_no, line) in set_csv_text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.splitn(2, ',');
+        let id_str = parts.next().map(str::trim).unwrap_or("");
+        let name = parts
+            .next()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                panic!("missing set name on line {} in ../data/set_data.csv", line_no + 1)
+            });
+
+        let id: u16 = id_str.parse().unwrap_or_else(|_| {
+            panic!(
+                "invalid set id '{}' on line {} in ../data/set_data.csv",
+                id_str,
+                line_no + 1
+            )
+        });
+
+        sets_vec.push(ItemSet { id, name });
+    }
 
     let mut skill_id_map: HashMap<String, u16> = HashMap::new();
     let mut skills_vec: Vec<Skill> = Vec::new();
@@ -348,9 +384,12 @@ pub fn process_data_into_master_table_serialized() {
     let mut meta_lookup: HashMap<String, SkillMetadata> = HashMap::new();
 
     for (_key, meta) in raw_meta {
-        let f = meta.fileName
-            .strip_suffix(".png").unwrap()
-            .strip_prefix("ability_").unwrap()
+        let f = meta
+            .fileName
+            .strip_suffix(".png")
+            .unwrap()
+            .strip_prefix("ability_")
+            .unwrap()
             .to_string();
         meta_lookup.insert(f, meta);
     }
@@ -442,6 +481,7 @@ pub fn process_data_into_master_table_serialized() {
         rows: out_rows,
         players: players_vec,
         skills: skills_vec,
+        sets: sets_vec,
     };
 
     let mut out_file = File::create("data/master_table.bin").expect("failed to create master_table.bin");
@@ -453,8 +493,8 @@ pub fn process_data_into_master_table_serialized() {
     json_file.write_all(json_text.as_bytes()).expect("failed to write master_table.json");
 
     println!(
-        "Wrote master_table.bin (binary) and master_table.json (readable). Rows: {}, Players: {}, Skills: {}",
-        master.rows.len(), master.players.len(), master.skills.len()
+        "Wrote master_table.bin (binary) and master_table.json (readable). Rows: {}, Players: {}, Skills: {}, Sets: {}",
+        master.rows.len(), master.players.len(), master.skills.len(), master.sets.len()
     );
 }
 
@@ -503,7 +543,7 @@ pub fn top_n_skills_for_partitions(master: &MasterTable, partition_filter: &[u8]
                 result.push((skill.clone(), *count));
             }
         } else {
-            total_other_count += count; // OR +=1 depending on your meaning
+            total_other_count += count;
         }
     }
     
@@ -559,6 +599,200 @@ pub fn top_n_skills_chart_vectors(master: &MasterTable, partition_filter: &[u8],
         let name = skill.display_name.clone().unwrap_or_else(|| skill.name.clone());
         data.push(((count as i32).try_into().unwrap(), name));
         colours.push(colour_from_skill(&skill));
+    }
+
+    (data, colours)
+}
+
+pub fn top_n_sets_for_partitions(master: &MasterTable, partition_filter: &[u8], n: usize) -> Vec<(ItemSet, u32)> {
+    let filter: Option<HashSet<u8>> = if partition_filter.is_empty() {
+        None
+    } else {
+        Some(partition_filter.iter().copied().collect())
+    };
+
+    let mut name_to_base_id: HashMap<String, u16> = HashMap::new();
+    let mut canonical_id: HashMap<u16, u16> = HashMap::new();
+
+    for s in &master.sets {
+        let raw_name = &s.name;
+        let normalized_name = raw_name.strip_prefix("Perfected ").unwrap_or(raw_name);
+
+        match name_to_base_id.get(normalized_name) {
+            Some(&existing_id) => {
+                if !raw_name.starts_with("Perfected ") {
+                    canonical_id.insert(existing_id, s.id);
+                    name_to_base_id.insert(normalized_name.to_string(), s.id);
+                }
+                canonical_id.insert(s.id, name_to_base_id[normalized_name]);
+            }
+            None => {
+                name_to_base_id.insert(normalized_name.to_string(), s.id);
+                canonical_id.insert(s.id, s.id);
+            }
+        }
+    }
+
+    let mut freq: HashMap<u16, u32> = HashMap::new();
+
+    for row in &master.rows {
+        let include = match &filter {
+            Some(set) => set.contains(&row.partition_id),
+            None => true,
+        };
+
+        if !include {
+            continue;
+        }
+
+        let unique_sets: HashSet<u16> = row.armour.iter().copied().collect();
+
+        for original_id in unique_sets {
+            if original_id == 0 {
+                continue;
+            }
+
+            if let Some(&base_id) = canonical_id.get(&original_id) {
+                *freq.entry(base_id).or_insert(0) += 1;
+            }
+        }
+    }
+
+    let mut set_counts: Vec<(u16, u32)> = freq.into_iter().collect();
+    set_counts.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let set_lookup: HashMap<u16, ItemSet> = master
+        .sets
+        .iter()
+        .cloned()
+        .map(|s| (s.id, s))
+        .collect();
+
+    let mut result: Vec<(ItemSet, u32)> = Vec::new();
+    let mut total_other_count: u32 = 0;
+
+    for (i, (id, count)) in set_counts.iter().enumerate() {
+        if i < n {
+            let set = set_lookup
+                .get(id)
+                .cloned()
+                .unwrap_or_else(|| ItemSet {
+                    id: *id,
+                    name: format!("Unknown ({})", id),
+                });
+            result.push((set, *count));
+        } else {
+            total_other_count += count;
+        }
+    }
+
+    if total_other_count > 0 {
+        result.push((
+            ItemSet {
+                id: 999,
+                name: "Other".to_string(),
+            },
+            total_other_count,
+        ));
+    }
+
+    result
+}
+
+pub fn colour_from_set(set: &ItemSet) -> Color {
+    let hex = match set.id {
+        83 => "#CF6A32", // Elf Bane
+        127 => "#476291", // Deadly Strike
+        137 => "#D32CE6", // Berserking Warrior (Advancing Yokeda)
+        // 147 => "#38F3AB", // Way of Martial Knowledge
+        // 205 => "#4B69FF", // Willpower
+        // 232 => "#38F3AB", // Roar of Alkosh
+        292 => "#8650AC", // Mother's Sorrow
+        304 => "#70B04A", // Medusa
+        // 332 => "#AA0000", // Master Architect
+        336 => "#A32C2E", // Pillar of Nirn
+        338 => "#CF6A32", // Flame Blossom
+        353 => "#4B69FF", // Mechanical Acuity
+        389 | 393 => "#FFD700", // Arms of Relequen
+        390 | 394 => "#F4A460", // Mantle of Siroria
+        430 => "#DAA520", // Tzogvin's Warband
+        444 | 449 => "#00BFFF", // False God's Devotion
+        445 | 450 => "#B22222", // Tooth of Lokkestiiz
+        455 => "#6B8E23", // Z'en's Redress
+        456 => "#007FFF", // Azureblight Reaper
+        470 => "#476291", // New Moon Acolyte
+        475 => "#AA0000", // Aegis Caller
+        570 => "#38F3AB", // Kinras's Wrath
+        584 => "#48D1CC", // Diamond's Victory
+        586 | 589 => "#70B04A", // Sul-Xan's Torment
+        587 | 591 => "#50A7FC", // Bahsei's Mania
+        646 | 653 => "#00BFFF", // Whorl of the Depths
+        647 | 652 => "#96DA43", // Coral Riptide
+        684 => "#FF4500", // Runecarver's Blaze
+        702 | 707 => "#2F4F4F", // Ansuul's Torment
+        // 764 => "#FFD700", // Highland Sentinel
+        767 | 772 => "#E4AE33", // Slivers of the Null Arca
+        777 => "#8847FF", // Corpseburster
+        // 809 => "#", // Tide-Born Wildstalker
+        168 | // Nerien'eth
+        169 | // Valkyn Skoria
+        170 | // Maw of the Infernal
+        257 | // Velidreth
+        273 | // Ilambris
+        274 | // Iceheart
+        275 | // Stormfist
+        279 | // Selene
+        280 | // Grothdarr
+        342 | // Domihaus
+        350 | // Zaan
+        458 | // Grundwulf
+        459 // Maarselok
+        => "#B0C4DE", // Monster Sets
+        270 => "#4D7942", // Slimecraw
+        373 | 526 => "#99CCFF", // Crushing Wall
+        369 | 522 => "#FFC0CB", // Merciless Charge
+        372 | 525 // Thunderous Volley
+        | 367 | 361 // Concentrated Force
+        | 316 | 531 // Caustic Arrow
+        | 413 | 425 // Spectral Cloak
+        | 371 | 524 // Cruel Flurry
+        => "#FFE4C4", // Arena Weapons
+        501 | 503 | 505 | 519 | 520 | 521 | 575 | 576 | 593 | 594 | 596 | 597 | 625 | 626 | 627 | 654 | 655 | 656 | 657 | 658 | 674 | 675 | 676 | 691 | 692 | 693 | 694 | 760 | 761 | 762 | 811 | 812 | 813 | 845 => "#FF8200", // Mythics
+        999 => "#708090",
+        _ => "#708090",
+        // _ => {
+        //     let mut x = set.id as u32;
+
+        //     // simple integer hash (xorshift-ish)
+        //     x ^= x << 13;
+        //     x ^= x >> 17;
+        //     x ^= x << 5;
+
+        //     // map to RGB
+        //     let r = (x & 0xFF) as u8;
+        //     let g = ((x >> 8) & 0xFF) as u8;
+        //     let b = ((x >> 16) & 0xFF) as u8;
+
+        //     // produce static string via stack buffer
+        //     // (returned as &'static str by leaking the string)
+        //     let s = format!("#{:02X}{:02X}{:02X}", r, g, b);
+        //     Box::leak(s.into_boxed_str())
+        // }
+    };
+
+    Color::Value(hex.to_string())
+}
+
+pub fn top_n_sets_chart_vectors(master: &MasterTable, partition_filter: &[u8], n: usize) -> (Vec<(i32, String)>, Vec<Color>) {
+    let top_sets = top_n_sets_for_partitions(master, partition_filter, n);
+
+    let mut data: Vec<(i32, String)> = Vec::with_capacity(top_sets.len());
+    let mut colours: Vec<Color> = Vec::with_capacity(top_sets.len());
+
+    for (set, count) in top_sets {
+        let name = set.name.clone();
+        data.push(((count as i32).try_into().unwrap(), name));
+        colours.push(colour_from_set(&set));
     }
 
     (data, colours)
