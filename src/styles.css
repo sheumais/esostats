@@ -1,0 +1,35 @@
+@font-face {
+  font-family: 'Univers';
+  src: url('static/font/univers67.woff2') format('woff2'),
+       url('static/font/univers67.woff') format('woff'),
+       url('static/font/univers67.otf') format('opentype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Univers';
+  src: url('static/font/univers57.woff2') format('woff2'),
+       url('static/font/univers57.woff') format('woff'),
+       url('static/font/univers57.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'TF2Build';
+  src: url('static/font/tf2build.woff2') format('woff2');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'TF2Build';
+  src: url('static/font/tf2secondary.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+:root {
+  font-family: 'TF2Build';
+}
