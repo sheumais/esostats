@@ -1,9 +1,10 @@
-use std::{collections::{HashMap, HashSet}, fs::File, io::Write};
-
+use std::{collections::{HashMap, HashSet}, fs::{self, File}, io::Write, path::Path};
+use bitcode::*;
 use charming::element::Color;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct Row {
     pub zone: u32,
     pub boss: u32,
@@ -17,7 +18,7 @@ pub struct Row {
     pub gear: Vec<GearItem>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct GearItem {
     pub name: String,
     pub icon: String,
@@ -258,6 +259,7 @@ pub fn parse_set_data_into_hashmap() -> HashMap<u16, &'static str> {
 
     lookup_table
 }
+
 pub fn parse_set_ids_into_hashmap() -> HashMap<u32, u16> {
     let mut lookup_table: HashMap<u32, u16> = HashMap::new();
     let data = include_str!("../data/set_ids.csv");
@@ -283,7 +285,7 @@ pub fn parse_set_ids_into_hashmap() -> HashMap<u32, u16> {
     lookup_table
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Encode, Decode)]
 pub struct TableRow {
     pub boss_id: u8,
     pub partition_id: u8,
@@ -297,13 +299,14 @@ pub struct TableRow {
     pub armour: Vec<u16>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Encode, Decode)]
 pub struct Player {
     pub id: u32,
     pub name: String,
+    pub text: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Encode, Decode)]
 pub struct Skill {
     pub id: u16,
     pub name: String,
@@ -313,7 +316,7 @@ pub struct Skill {
     pub display_name: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Encode, Decode)]
 pub struct SkillMetadata {
     pub fileName: String,
     pub skillName: String,
@@ -321,18 +324,53 @@ pub struct SkillMetadata {
     pub skillTree: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Encode, Decode)]
 pub struct ItemSet {
     pub id: u16,
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Encode, Decode)]
 pub struct MasterTable {
     pub rows: Vec<TableRow>,
     pub players: Vec<Player>,
     pub skills: Vec<Skill>,
     pub sets: Vec<ItemSet>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct HodorPlayer {
+    name: String,
+    text: String,
+}
+
+fn read_players_from_folder<P: AsRef<Path>>(dir: P) -> std::io::Result<Vec<HodorPlayer>> {
+    let mut players = Vec::new();
+
+    let re = Regex::new(r#"n\["@([^"]+)"\]\s*=\s*\{"[^"]*",\s*"([^"]+)"}"#).unwrap();
+
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if !path.is_file() {
+            continue;
+        }
+
+        let content = fs::read_to_string(&path)?;
+
+        for cap in re.captures_iter(&content) {
+            let raw_name = cap[1].to_string();
+            let text = cap[2].to_string();
+
+            players.push(HodorPlayer {
+                name: raw_name,
+                text,
+            });
+        }
+    }
+
+    Ok(players)
 }
 
 pub fn process_data_into_master_table_serialized() {
@@ -424,7 +462,13 @@ pub fn process_data_into_master_table_serialized() {
         }
         let new_id = players_vec.len() as u32 + 1;
         player_id_map.insert(name.clone(), new_id);
-        players_vec.push(Player { id: new_id, name });
+
+        players_vec.push(Player {
+            id: new_id,
+            name,
+            text: "".into(),
+        });
+
         new_id
     };
 
@@ -477,6 +521,20 @@ pub fn process_data_into_master_table_serialized() {
         process_entry(entry, true);
     }
 
+    let hodor_dir = r"..\Elder Scrolls Online\live\AddOns\LibCustomNames\PC\names";
+    let hodor_players = read_players_from_folder(hodor_dir)
+        .expect("Failed reading Hodor player files");
+
+    for hp in hodor_players {
+        let name = hp.name.clone();
+
+        if let Some(&pid) = player_id_map.get(&name) {
+            if let Some(existing) = players_vec.iter_mut().find(|p| p.id == pid) {
+                existing.text = hp.text.clone();
+            }
+        }
+    }
+
     let master = MasterTable {
         rows: out_rows,
         players: players_vec,
@@ -485,8 +543,10 @@ pub fn process_data_into_master_table_serialized() {
     };
 
     let mut out_file = File::create("data/master_table.bin").expect("failed to create master_table.bin");
-    bincode::serde::encode_into_std_write(&master, &mut out_file, bincode::config::standard())
-        .expect("failed to serialize master table with bincode");
+    // bincode::serde::encode_into_std_write(&master, &mut out_file, bincode::config::standard())
+        // .expect("failed to serialize master table with bincode");
+    let encoded = bitcode::encode(&master);
+    out_file.write(&encoded).unwrap();
 
     let mut json_file = File::create("data/master_table.json").expect("failed to create master_table.json");
     let json_text = serde_json::to_string_pretty(&master).expect("failed to serialize to json");
@@ -502,11 +562,9 @@ const MASTER_TABLE_BYTES: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DI
 
 pub fn load_master_table() -> MasterTable {
     {
-        let config = bincode::config::standard();
-        bincode::serde::borrow_decode_from_slice(MASTER_TABLE_BYTES, config)
+        bitcode::decode::<MasterTable>(MASTER_TABLE_BYTES)
     }
     .expect("Failed to decode master table")
-    .0
 }
 
 pub fn top_n_skills_for_partitions(master: &MasterTable, partition_filter: &[u8], n: usize) -> Vec<(Skill, u32)> {
@@ -560,6 +618,117 @@ pub fn top_n_skills_for_partitions(master: &MasterTable, partition_filter: &[u8]
     result
 }
 
+pub fn top_n_skills_for_partitions_normalised(master: &MasterTable, partition_filter: &[u8], n: usize) -> Vec<(Skill, u32)> {
+    let filter: Option<HashSet<u8>> = if partition_filter.is_empty() {
+        None
+    } else {
+        Some(partition_filter.iter().copied().collect())
+    };
+
+    let mut rows_per_partition: HashMap<u8, usize> = HashMap::new();
+    let mut per_partition_skill_counts: HashMap<u8, HashMap<u16, u32>> = HashMap::new();
+
+    for row in &master.rows {
+        let include = match &filter {
+            Some(set) => set.contains(&row.partition_id),
+            None => true,
+        };
+
+        if !include {
+            continue;
+        }
+
+        *rows_per_partition.entry(row.partition_id).or_insert(0) += 1;
+
+        let skill_map = per_partition_skill_counts
+            .entry(row.partition_id)
+            .or_insert_with(HashMap::new);
+
+        for skill_id in &row.skills {
+            *skill_map.entry(*skill_id).or_insert(0) += 1;
+        }
+    }
+
+    if rows_per_partition.is_empty() {
+        return Vec::new();
+    }
+
+    let min_partition_size = rows_per_partition
+        .values()
+        .cloned()
+        .min()
+        .unwrap_or(0);
+
+    if min_partition_size == 0 {
+        return Vec::new();
+    }
+
+    let mut normalized_counts: HashMap<u16, f64> = HashMap::new();
+
+    for (&partition_id, skill_map) in &per_partition_skill_counts {
+        let partition_size = *rows_per_partition.get(&partition_id).unwrap_or(&0) as f64;
+        if partition_size <= 0.0 {
+            continue;
+        }
+        let weight = (min_partition_size as f64) / partition_size;
+
+        for (&skill_id, &count) in skill_map {
+            let entry = normalized_counts.entry(skill_id).or_insert(0.0);
+            *entry += (count as f64) * weight;
+        }
+    }
+
+    let mut skill_counts: Vec<(u16, u32)> = normalized_counts
+        .into_iter()
+        .map(|(id, v)| {
+            let rv = v.round();
+            let rv_u32 = if rv < 0.0 { 0 } else { rv as u32 };
+            (id, rv_u32)
+        })
+        .collect();
+
+    skill_counts.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let mut result: Vec<(Skill, u32)> = Vec::new();
+    let mut total_other_count: u32 = 0;
+
+    for (i, (id, count)) in skill_counts.iter().enumerate() {
+        if i < n {
+            if let Some(skill) = master.skills.iter().find(|s| s.id == *id) {
+                result.push((skill.clone(), *count));
+            } else {
+                result.push((
+                    Skill {
+                        id: *id,
+                        name: format!("Skill #{}", id),
+                        class: None,
+                        tree: None,
+                        display_name: None,
+                    },
+                    *count,
+                ));
+            }
+        } else {
+            total_other_count = total_other_count.saturating_add(*count);
+        }
+    }
+
+    if total_other_count > 0 {
+        result.push((
+            Skill {
+                id: 999,
+                name: "Other".to_string(),
+                class: None,
+                tree: None,
+                display_name: Some("Other".to_string()),
+            },
+            total_other_count,
+        ));
+    }
+
+    result
+}
+
 pub fn colour_from_skill(skill: &Skill) -> Color {
     let hex = match skill.class.as_deref() {
         Some("Arcanist")      => "#9ACD32",
@@ -591,6 +760,21 @@ pub fn colour_from_skill(skill: &Skill) -> Color {
 
 pub fn top_n_skills_chart_vectors(master: &MasterTable, partition_filter: &[u8], n: usize) -> (Vec<(i32, String)>, Vec<Color>) {
     let top_skills = top_n_skills_for_partitions(master, partition_filter, n);
+
+    let mut data: Vec<(i32, String)> = Vec::with_capacity(top_skills.len());
+    let mut colours: Vec<Color> = Vec::with_capacity(top_skills.len());
+
+    for (skill, count) in top_skills {
+        let name = skill.display_name.clone().unwrap_or_else(|| skill.name.clone());
+        data.push(((count as i32).try_into().unwrap(), name));
+        colours.push(colour_from_skill(&skill));
+    }
+
+    (data, colours)
+}
+
+pub fn top_n_skills_normalised_chart_vectors(master: &MasterTable, partition_filter: &[u8], n: usize) -> (Vec<(i32, String)>, Vec<Color>) {
+    let top_skills = top_n_skills_for_partitions_normalised(master, partition_filter, n);
 
     let mut data: Vec<(i32, String)> = Vec::with_capacity(top_skills.len());
     let mut colours: Vec<Color> = Vec::with_capacity(top_skills.len());
@@ -699,6 +883,128 @@ pub fn top_n_sets_for_partitions(master: &MasterTable, partition_filter: &[u8], 
     result
 }
 
+pub fn top_n_sets_for_partitions_normalised(master: &MasterTable, partition_filter: &[u8], n: usize) -> Vec<(ItemSet, u32)> {
+    let filter: Option<HashSet<u8>> = if partition_filter.is_empty() {
+        None
+    } else {
+        Some(partition_filter.iter().copied().collect())
+    };
+
+    let mut name_to_base_id: HashMap<String, u16> = HashMap::new();
+    let mut canonical_id: HashMap<u16, u16> = HashMap::new();
+
+    for s in &master.sets {
+        let raw_name = &s.name;
+        let normalized_name = raw_name.strip_prefix("Perfected ").unwrap_or(raw_name);
+
+        match name_to_base_id.get(normalized_name) {
+            Some(&existing_id) => {
+                if !raw_name.starts_with("Perfected ") {
+                    canonical_id.insert(existing_id, s.id);
+                    name_to_base_id.insert(normalized_name.to_string(), s.id);
+                }
+                canonical_id.insert(s.id, name_to_base_id[normalized_name]);
+            }
+            None => {
+                name_to_base_id.insert(normalized_name.to_string(), s.id);
+                canonical_id.insert(s.id, s.id);
+            }
+        }
+    }
+
+    let mut rows_per_partition: HashMap<u8, usize> = HashMap::new();
+    let mut per_partition_set_counts: HashMap<u8, HashMap<u16, u32>> = HashMap::new();
+
+    for row in &master.rows {
+        let include = match &filter {
+            Some(set) => set.contains(&row.partition_id),
+            None => true,
+        };
+
+        if !include {
+            continue;
+        }
+
+        *rows_per_partition.entry(row.partition_id).or_insert(0) += 1;
+
+        let set_map = per_partition_set_counts
+            .entry(row.partition_id)
+            .or_insert_with(HashMap::new);
+
+        let unique_sets: HashSet<u16> = row.armour.iter().copied().collect();
+
+        for s in unique_sets {
+            if s == 0 {
+                continue;
+            }
+            if let Some(&cid) = canonical_id.get(&s) {
+                *set_map.entry(cid).or_insert(0) += 1;
+            }
+        }
+    }
+
+    if rows_per_partition.is_empty() {
+        return Vec::new();
+    }
+
+    let min_partition_size = rows_per_partition.values().cloned().min().unwrap();
+
+    let mut normalized_counts: HashMap<u16, f64> = HashMap::new();
+
+    for (&partition_id, set_map) in &per_partition_set_counts {
+        let size = rows_per_partition[&partition_id] as f64;
+        if size == 0.0 {
+            continue;
+        }
+
+        let weight = (min_partition_size as f64) / size;
+
+        for (&set_id, &count) in set_map {
+            *normalized_counts.entry(set_id).or_insert(0.0) += (count as f64) * weight;
+        }
+    }
+
+    let mut set_counts: Vec<(u16, u32)> = normalized_counts
+        .into_iter()
+        .map(|(id, v)| (id, v.round().max(0.0) as u32))
+        .collect();
+
+    set_counts.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let set_lookup: HashMap<u16, ItemSet> =
+        master.sets.iter().cloned().map(|s| (s.id, s)).collect();
+
+    let mut result: Vec<(ItemSet, u32)> = Vec::new();
+    let mut total_other = 0;
+
+    for (i, (id, count)) in set_counts.iter().enumerate() {
+        if i < n {
+            let set = set_lookup
+                .get(id)
+                .cloned()
+                .unwrap_or_else(|| ItemSet {
+                    id: *id,
+                    name: format!("Unknown ({})", id),
+                });
+            result.push((set, *count));
+        } else {
+            total_other += count;
+        }
+    }
+
+    if total_other > 0 {
+        result.push((
+            ItemSet {
+                id: 999,
+                name: "Other".to_string(),
+            },
+            total_other,
+        ));
+    }
+
+    result
+}
+
 pub fn colour_from_set(set: &ItemSet) -> Color {
     let hex = match set.id {
         83 => "#CF6A32", // Elf Bane
@@ -726,14 +1032,14 @@ pub fn colour_from_set(set: &ItemSet) -> Color {
         584 => "#48D1CC", // Diamond's Victory
         586 | 589 => "#70B04A", // Sul-Xan's Torment
         587 | 591 => "#50A7FC", // Bahsei's Mania
-        646 | 653 => "#00BFFF", // Whorl of the Depths
+        646 | 653 => "#4B69FF", // Whorl of the Depths
         647 | 652 => "#96DA43", // Coral Riptide
         684 => "#FF4500", // Runecarver's Blaze
         702 | 707 => "#2F4F4F", // Ansuul's Torment
-        // 764 => "#FFD700", // Highland Sentinel
+        764 => "#F4A460", // Highland Sentinel
         767 | 772 => "#E4AE33", // Slivers of the Null Arca
         777 => "#8847FF", // Corpseburster
-        // 809 => "#", // Tide-Born Wildstalker
+        809 => "#8FBC8F", // Tide-Born Wildstalker
         168 | // Nerien'eth
         169 | // Valkyn Skoria
         170 | // Maw of the Infernal
@@ -758,26 +1064,8 @@ pub fn colour_from_set(set: &ItemSet) -> Color {
         | 371 | 524 // Cruel Flurry
         => "#FFE4C4", // Arena Weapons
         501 | 503 | 505 | 519 | 520 | 521 | 575 | 576 | 593 | 594 | 596 | 597 | 625 | 626 | 627 | 654 | 655 | 656 | 657 | 658 | 674 | 675 | 676 | 691 | 692 | 693 | 694 | 760 | 761 | 762 | 811 | 812 | 813 | 845 => "#FF8200", // Mythics
-        999 => "#708090",
-        _ => "#708090",
-        // _ => {
-        //     let mut x = set.id as u32;
-
-        //     // simple integer hash (xorshift-ish)
-        //     x ^= x << 13;
-        //     x ^= x >> 17;
-        //     x ^= x << 5;
-
-        //     // map to RGB
-        //     let r = (x & 0xFF) as u8;
-        //     let g = ((x >> 8) & 0xFF) as u8;
-        //     let b = ((x >> 16) & 0xFF) as u8;
-
-        //     // produce static string via stack buffer
-        //     // (returned as &'static str by leaking the string)
-        //     let s = format!("#{:02X}{:02X}{:02X}", r, g, b);
-        //     Box::leak(s.into_boxed_str())
-        // }
+        999 => "#B2B2B2",
+        _ => "#B2B2B2",
     };
 
     Color::Value(hex.to_string())
@@ -797,3 +1085,124 @@ pub fn top_n_sets_chart_vectors(master: &MasterTable, partition_filter: &[u8], n
 
     (data, colours)
 }
+
+pub fn top_n_sets_normalised_chart_vectors(master: &MasterTable, partition_filter: &[u8], n: usize) -> (Vec<(i32, String)>, Vec<Color>) {
+    let top_sets = top_n_sets_for_partitions_normalised(master, partition_filter, n);
+
+    let mut data: Vec<(i32, String)> = Vec::with_capacity(top_sets.len());
+    let mut colours: Vec<Color> = Vec::with_capacity(top_sets.len());
+
+    for (set, count) in top_sets {
+        let name = set.name.clone();
+        data.push(((count as i32).try_into().unwrap(), name));
+        colours.push(colour_from_set(&set));
+    }
+
+    (data, colours)
+}
+
+pub fn top_n_players_by_average_rank(master: &MasterTable, partition_filter: &[u8], n: usize) -> Vec<(f64, String)> {
+    let filter: Option<HashSet<u8>> = if partition_filter.is_empty() {
+        None
+    } else {
+        Some(partition_filter.iter().copied().collect())
+    };
+
+    let mut agg: HashMap<u32, (u64, u64)> = HashMap::new();
+    for row in &master.rows {
+        if let Some(ref f) = filter {
+            if !f.contains(&row.partition_id) {
+                continue;
+            }
+        }
+        let entry = agg.entry(row.player_id).or_insert((0u64, 0u64));
+        entry.0 += row.ranking as u64;
+        entry.1 += 1;
+    }
+
+    let id_to_name: HashMap<u32, String> = master
+        .players
+        .iter()
+        .filter(|p| !p.name.is_empty())
+        .map(|p| (p.id, p.name.clone()))
+        .collect();
+
+    let mut averages: Vec<(f64, u32)> = agg
+        .into_iter()
+        .filter(|(player_id, (_, count))| {
+            *count >= 20 && id_to_name.contains_key(player_id)
+        })
+        .map(|(player_id, (sum, count))| ((sum as f64) / (count as f64), player_id))
+        .collect();
+
+    averages.sort_by(|a, b| {
+        a.0.partial_cmp(&b.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.1.cmp(&b.1))
+    });
+
+    averages
+        .into_iter()
+        .take(n)
+        .map(|(avg, player_id)| {
+            let name = id_to_name[&player_id].clone();
+            (avg, name)
+        })
+        .collect()
+}
+
+pub fn top_n_players_by_top_k_count(master: &MasterTable, partition_filter: &[u8], n: usize, k: u32) -> Vec<(u64, String)> {
+    let filter: Option<HashSet<u8>> = if partition_filter.is_empty() {
+        None
+    } else {
+        Some(partition_filter.iter().copied().collect())
+    };
+
+    let mut agg: HashMap<u32, u64> = HashMap::new();
+    for row in &master.rows {
+        if let Some(ref f) = filter {
+            if !f.contains(&row.partition_id) {
+                continue;
+            }
+        }
+
+        if (row.ranking as u32) <= k {
+            *agg.entry(row.player_id).or_insert(0) += 1;
+        }
+    }
+
+    let id_to_name: HashMap<u32, String> = master
+        .players
+        .iter()
+        .filter(|p| !p.name.is_empty())
+        .map(|p| (p.id, p.name.clone()))
+        .collect();
+
+    let mut pairs: Vec<(u64, String)> = agg
+        .into_iter()
+        .filter_map(|(player_id, count)| {
+            if count == 0 {
+                return None;
+            }
+            id_to_name.get(&player_id).map(|name| (count, name.clone()))
+        })
+        .collect();
+
+    pairs.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then_with(|| a.1.cmp(&b.1))
+    });
+
+    pairs.into_iter().take(n).collect()
+}
+
+pub fn player_rows(master: &MasterTable, player_id: u32) -> Vec<TableRow> {
+    let mut player_rows = Vec::new();
+    for row in &master.rows {
+        if row.player_id == player_id {
+            player_rows.push(row.clone());
+        }
+    }
+    return player_rows;
+}
+

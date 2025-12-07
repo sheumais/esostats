@@ -1,92 +1,61 @@
-use yew::{Html, function_component, html, use_memo};
+use yew::{Callback, Html, function_component, html, use_memo, use_state};
 use yew_icons::{Icon, IconId};
 
-use crate::pie::{SetPieChart, SkillPieChart};
+use crate::{players::PlayersPage, sets::SetsPage, skills::SkillsPage};
 
 mod data;
 mod pie;
+mod players;
+mod skills;
+mod sets;
+
+enum Page {
+    Players,
+    Sets,
+    Skills
+}
 
 #[function_component(App)]
-fn app() -> Html {
+pub fn app() -> Html {
     let master_table = use_memo((), |_| data::load_master_table());
+    let page = use_state(|| Page::Players);
 
-    let skill_charts: Html = (1..28)
-        .map(|i| {
-            html! {
-                <SkillPieChart
-                    master_table={master_table.clone()}
-                    partitions={vec![i]}
-                    top_n={12}
-                    chart_id={format!("topskills_{}", i)}
-                    width={500}
-                    height={300}
-                />
-            }
-        })
-        .collect();
+    let on_nav = {
+        let page = page.clone();
+        Callback::from(move |p| page.set(p))
+    };
 
-    let set_charts: Html = (1..28)
-        .map(|i| {
-            html! {
-                <SetPieChart
-                    master_table={master_table.clone()}
-                    partitions={vec![i]}
-                    top_n={12}
-                    chart_id={format!("topsets_{}", i)}
-                    width={500}
-                    height={300}
-                />
-            }
-        })
-        .collect();
+    let content = match *page {
+        Page::Skills => html! { <SkillsPage master_table={master_table.clone()} /> },
+        Page::Sets => html! { <SetsPage master_table={master_table.clone()} /> },
+        Page::Players => html! { <PlayersPage master_table={master_table.clone()} /> },
+    };
+
+    let button_style = "background-color: #15171fff; font-family: 'TF2Build'; color: #fff; border: none; text-decoration: none; padding: 0.25em; outline: none; font-size: 2.5em; border-radius: 0.25em; cursor: pointer;".to_string();
 
     html! {
-        <div style=r#"display: flex; justify-content: center; align-items: center; flex-direction: row; flex-wrap: wrap; color: #fff;"#>
-            <div style=r#"font-size: 4rem; margin: 1rem; font-weight: bold; user-select: none; width: 100%; text-align: center;"#>{"ESO Raid Stats"}</div>
-            <SkillPieChart
-                    master_table={master_table.clone()}
-                    partitions={vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]}
-                    top_n={75}
-                    chart_id={format!("topskills_all")}
-                    width={1500}
-                    height={900}
-            />
-            <div style=r#"font-size: 2rem; margin: 1rem; font-weight: bold; user-select: none; width: 100%; text-align: center;"#>{"Top 12 Most Frequently Used Skills"}</div>
-            {skill_charts}
+        <div style="display: flex; align-items: center; flex-direction: column; min-height: 100vh;">
+            <div style="top: 0px;">
+                <div style="display: flex; gap: 1rem; align-items: center; justify-content: center; width: 100vw; margin-top: 0.5em;">
+                    <div style="font-size: 2.5rem; font-weight: 700; color: #fff;">{"ESO Raid Stats"}</div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick={Callback::from({let on_nav = on_nav.clone(); move |_| on_nav.emit(Page::Players)})} style={button_style.clone()}>{"Players"}</button>
+                        <button onclick={Callback::from({let on_nav = on_nav.clone(); move |_| on_nav.emit(Page::Skills)})} style={button_style.clone()}>{"Skills"}</button>
+                        <button onclick={Callback::from({let on_nav = on_nav.clone(); move |_| on_nav.emit(Page::Sets)})} style={button_style.clone()}>{"Sets"}</button>
+                    </div>
+                </div>
+            </div>
 
-            <div style=r#"font-size: 2rem; margin: 1rem; font-weight: bold; user-select: none; width: 100%; text-align: center;"#>{"Sets"}</div>
-            <SetPieChart
-                master_table={master_table.clone()}
-                partitions={vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]}
-                top_n={50}
-                chart_id={format!("topsets_all")}
-                width={1500}
-                height={900}
-            />
-            {set_charts}
 
+            <div>
+                { content }
+            </div>
             <div style="position: fixed; bottom: 1em; right: 1em; display: flex; gap: 1em; z-index: 999;">
-                <a
-                    href={"https://discord.gg/FjJjXHjUQ4"}
-                    target="_blank"
-                    rel="noopener noreferrer">
-                    <Icon icon_id={IconId::BootstrapDiscord} style={r#"
-                        width: 3em;
-                        height: 3em;
-                        color: #fff;
-                        cursor: pointer;
-                    "#} />
+                <a href={"https://discord.gg/FjJjXHjUQ4"} target="_blank" rel="noopener noreferrer">
+                    <Icon icon_id={IconId::BootstrapDiscord} style={r#"width: 3em; height: 3em; color: #fff; cursor: pointer;"#} />
                 </a>
-                <a
-                    href={"https://github.com/sheumais/"}
-                    target="_blank"
-                    rel="noopener noreferrer">
-                    <Icon icon_id={IconId::BootstrapGithub} style={r#"
-                        width: 3em;
-                        height: 3em;
-                        color: #fff;
-                        cursor: pointer;
-                    "#} />
+                <a href={"https://github.com/sheumais/"} target="_blank" rel="noopener noreferrer">
+                    <Icon icon_id={IconId::BootstrapGithub} style={r#"width: 3em; height: 3em; color: #fff; cursor: pointer;"#} />
                 </a>
             </div>
         </div>
