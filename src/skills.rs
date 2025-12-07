@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use yew::{Html, Properties, function_component, html};
 
-use crate::pie::SkillPieChart;
+use crate::graph::{LargeSkillPieChart, SkillPieChart};
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct SkillsPageProps {
@@ -32,11 +32,11 @@ let master_table = props.master_table.clone();
 
     html! {
         <div style="width: 100%; display: flex; flex-direction: column; gap: 2rem; align-items: center; color: #fff;">
-            <SkillPieChart
+            <LargeSkillPieChart
                 master_table={master_table.clone()}
-                partitions={vec![]}
-                top_n={75}
-                chart_id={"topskills_all".to_string()}
+                partitions={vec![27]}
+                top_n={30}
+                chart_id={"topskills_latest".to_string()}
                 width={1500}
                 height={900}
             />
@@ -44,6 +44,14 @@ let master_table = props.master_table.clone();
             <div style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; width: 100%;">
                 { skill_charts }
             </div>
+            <LargeSkillPieChart
+                master_table={master_table.clone()}
+                partitions={vec![]}
+                top_n={75}
+                chart_id={"topskills_all".to_string()}
+                width={1500}
+                height={900}
+            />
         </div>
     }
 }

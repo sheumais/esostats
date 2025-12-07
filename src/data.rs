@@ -1,8 +1,9 @@
 use std::{collections::{HashMap, HashSet}, fs::{self, File}, io::Write, path::Path};
 use bitcode::*;
-use charming::element::Color;
+use charming::{element::Color, series::{SankeyLink, SankeyNode}};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 #[derive(Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct Row {
@@ -164,7 +165,7 @@ pub fn boss_to_boss_name(boss_id: u8) -> String {
         53 => "Reef Guardian",
         54 => "Tideborn Taleria",
         55 => "Exarchanic Yaseyla",
-        56 => "Archiwizard Twelvane and Chimera",
+        56 => "Archwizard Twelvane and Chimera",
         57 => "Ansuul the Tormentor",
         58 => "Count Ryelaz and Zilyesset",
         59 => "Orphic Shattered Shard",
@@ -1206,3 +1207,114 @@ pub fn player_rows(master: &MasterTable, player_id: u32) -> Vec<TableRow> {
     return player_rows;
 }
 
+pub fn percent_players_with_sets(master: &MasterTable, partition_filter: &[u8]) -> Vec<(ItemSet, f64)> {
+    // Build optional partition filter set
+    let filter: Option<HashSet<u8>> = if partition_filter.is_empty() {
+        None
+    } else {
+        Some(partition_filter.iter().copied().collect())
+    };
+
+    // Collect all set ids by normalized name (strip "Perfected ").
+    // Store (id, is_perfected) so we can pick a non-perfected id as canonical if present.
+    let mut name_to_ids: HashMap<String, Vec<(u16, bool)>> = HashMap::new();
+    for s in &master.sets {
+        let raw_name = &s.name;
+        let normalized = raw_name.strip_prefix("Perfected ").unwrap_or(raw_name).to_string();
+        let is_perfected = raw_name.starts_with("Perfected ");
+        name_to_ids.entry(normalized).or_default().push((s.id, is_perfected));
+    }
+
+    // Create canonical mapping: every id -> chosen base id.
+    // Choose a non-perfected id as the base if one exists; otherwise pick the first encountered id.
+    let mut canonical_id: HashMap<u16, u16> = HashMap::new();
+    for (_normalized_name, ids_vec) in name_to_ids.into_iter() {
+        let base_id = ids_vec
+            .iter()
+            .find(|(_, is_perf)| !*is_perf)
+            .map(|(id, _)| *id)
+            .or_else(|| ids_vec.first().map(|(id, _)| *id))
+            .expect("there should be at least one id for a name");
+        for (id, _) in ids_vec {
+            canonical_id.insert(id, base_id);
+        }
+    }
+
+    // Frequency counting
+    let mut freq: HashMap<u16, u32> = HashMap::new();
+    let mut total_rows_included: u32 = 0;
+    let mut players_with_any_set: u32 = 0;
+
+    for row in &master.rows {
+        let include = match &filter {
+            Some(set) => set.contains(&row.partition_id),
+            None => true,
+        };
+
+        if !include {
+            continue;
+        }
+
+        total_rows_included = total_rows_included.saturating_add(1);
+
+        // unique non-zero armour ids for this player/row
+        let unique_sets: HashSet<u16> = row.armour.iter().copied().filter(|&id| id != 0).collect();
+
+        if unique_sets.is_empty() {
+            continue;
+        }
+
+        players_with_any_set = players_with_any_set.saturating_add(1);
+
+        for original_id in unique_sets {
+            // map to canonical/base id if available, otherwise use the original id
+            let base_id = canonical_id.get(&original_id).copied().unwrap_or(original_id);
+            *freq.entry(base_id).or_insert(0) += 1;
+        }
+    }
+
+    if players_with_any_set == 0 {
+        return Vec::new();
+    }
+
+    let set_lookup: HashMap<u16, ItemSet> = master
+        .sets
+        .iter()
+        .cloned()
+        .map(|s| (s.id, s))
+        .collect();
+
+    let mut results: Vec<(ItemSet, f64)> = freq
+        .into_iter()
+        .map(|(id, count)| {
+            let pct = (count as f64) * 100.0 / (players_with_any_set as f64);
+            let set = set_lookup.get(&id).cloned().unwrap_or(ItemSet {
+                id,
+                name: format!("Unknown ({})", id),
+            });
+            (set, pct)
+        })
+        .collect();
+
+    results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    results
+}
+
+pub fn top_n_sets_percentage_chart_vectors(
+    master: &MasterTable,
+    partition_filter: &[u8],
+    n: usize,
+) -> (Vec<(f64, String)>, Vec<Color>) {
+    let top_sets = percent_players_with_sets(master, partition_filter);
+
+    let mut data: Vec<(f64, String)> = Vec::new();
+    let mut colours: Vec<Color> = Vec::new();
+
+    for (set, pct) in top_sets.into_iter().take(n) {
+        data.push((pct, set.name.clone()));
+        colours.push(colour_from_set(&set));
+    }
+
+    (data, colours)
+}

@@ -1,10 +1,8 @@
 use std::rc::Rc;
 use charming::{
-    Chart, WasmRenderer,
-    component::{Legend, LegendType},
-    element::{Color, ItemStyle, JsFunction, Label, LabelLine, LineStyle, Orient, TextStyle, Tooltip, Trigger},
-    series::Pie,
+    Chart, WasmRenderer, component::{Axis, Legend, LegendType}, datatype::DataPointItem, element::{AxisLabel, AxisTick, Color, Formatter, ItemStyle, JsFunction, Label, LabelAlign, LabelLine, LabelPosition, LineStyle, NameLocation, Orient, TextStyle, Tooltip, Trigger}, series::{Align, Bar, Pie}
 };
+use web_sys::FormData;
 use yew::prelude::*;
 
 use crate::data::{partition_to_name, partition_to_update_id};
@@ -43,6 +41,23 @@ fn default_tooltip() -> Tooltip {
             r#"
                 return `
                 <div style="color: #fff; font-family: "TF2Build";">${params.dataIndex+1}. ${params.name}: ${params.percent}%</div>
+                `
+            "#,
+        ))
+}
+
+fn percent_tooltip() -> Tooltip {
+    Tooltip::new()
+        .trigger(Trigger::Item)
+        .background_color("#282c38".to_string())
+        .border_width(2)
+        .formatter(JsFunction::new_with_args(
+            "params",
+            r#"
+                return `
+                <div style="color: #fff; font-family: "TF2Build";">
+                    ${params.dataIndex + 1}. ${params.name}: ${params.value.toFixed(1)}%
+                </div>
                 `
             "#,
         ))
@@ -122,6 +137,30 @@ fn build_large_chart_from_data(chart_data: Vec<(i32, String)>, chart_colors: Vec
         // .legend(large_legend())
         .color(chart_colors)
         .series(pie)
+}
+
+pub fn build_large_bar_graph_from_data(chart_data: Vec<(f64, String)>, chart_colors: Vec<Color>) -> Chart {
+    let labels: Vec<String> = chart_data.iter().map(|(_, lbl)| lbl.clone()).collect();
+
+    let data_points: Vec<DataPointItem> = chart_data
+        .iter()
+        .enumerate()
+        .map(|(idx, (val, _))| {
+            let color = chart_colors.get(idx).cloned().unwrap_or(Color::from("#000000"));
+            DataPointItem::new(*val).item_style(ItemStyle::new().color(color))
+        })
+        .collect();
+
+    let chart = Chart::new()
+        .x_axis(Axis::new().data(labels).name("Set Name").name_location(NameLocation::Center).name_text_style(TextStyle::new().font_family("TF2Build").font_size(24).color("#fff")).axis_label(AxisLabel::new().show(false)))
+        .y_axis(Axis::new().name("Percent of Parses Using The Set").name_location(NameLocation::Center).name_gap(45).name_text_style(TextStyle::new().font_family("TF2Build").font_size(24).color("#fff")).max_interval(10).max(100).axis_label(AxisLabel::new().color("#fff").font_family("TF2Build").font_size(16)))
+        .series(Bar::new().data(data_points).label(Label::new().show(true).position(LabelPosition::Top).align(LabelAlign::Left).color("#fff").font_family("TF2Build").font_size(16).formatter("  {b}").rotate("35").offset((-10, 0))))
+        .color(chart_colors)
+        .tooltip(percent_tooltip())
+        .legend(Legend::new().show(false));
+
+    chart
+
 }
 
 #[function_component(SkillPieChart)]
@@ -213,7 +252,7 @@ pub fn large_skill_pie_chart(props: &PieChartProps) -> Html {
     let height = props.height;
 
     let name = compute_title(&partitions, "Top 75 Most Used Skills");
-    let subtitle = format!("taken from top 100 parses on every boss each patch, normalised between patches");
+    let subtitle = format!("data from top 100 parses on every boss in every applicable patch on esologs, normalised between patches");
 
     let render_task = yew_hooks::use_async(async move {
         let renderer = WasmRenderer::new(width, height);
@@ -254,7 +293,7 @@ pub fn large_set_pie_chart(props: &PieChartProps) -> Html {
     let height = props.height;
 
     let name = compute_title(&partitions, "Top 50 Most Used Sets");
-    let subtitle = format!("taken from top 100 parses on every boss each patch, normalised between patches");
+    let subtitle = format!("data from top 100 parses on every boss in every applicable patch on esologs, normalised between patches");
 
     let render_task = yew_hooks::use_async(async move {
         let renderer = WasmRenderer::new(width, height);
@@ -279,6 +318,47 @@ pub fn large_set_pie_chart(props: &PieChartProps) -> Html {
         <div style="display: flex; flex-direction: column; align-items: center; color: #fff; margin: 1em; user-select: none;">
             <div style={format!("font-size: {}px; margin-bottom: 0.25em;", (width as f32).sqrt().round() * 1.2)}>{name}</div>
             <div style={format!("font-size: {}px; margin-bottom: 2em;", (width as f32).sqrt().round() * 0.5)}>{subtitle}</div>
+            <div style="margin:2em;" id={chart_id.clone()} />
+        </div>
+    }
+}
+
+#[function_component(LargeBarGraph)]
+pub fn large_bar_graph(props: &PieChartProps) -> Html {
+    let master_table = props.master_table.clone();
+    let partitions = props.partitions.clone();
+    let top_n = props.top_n;
+    let chart_id = props.chart_id.clone();
+    let chart_id_clone = chart_id.clone();
+    let width = props.width;
+    let height = props.height;
+
+    let name = format!("Percentage of Boss Parses Using Each Set (U{})", partition_to_update_id(partitions[0]));
+    let subtitle = format!("data from top 100 parses on every boss in every applicable patch on esologs, normalised between patches");
+
+    let render_task = yew_hooks::use_async(async move {
+        let renderer = WasmRenderer::new(width, height);
+        let (chart_data, chart_colors) =
+            crate::data::top_n_sets_percentage_chart_vectors(&master_table, &partitions, top_n);
+
+        let chart = build_large_bar_graph_from_data(chart_data, chart_colors);
+
+        renderer.render(&chart_id_clone, &chart).unwrap();
+        Ok::<(), ()>(())
+    });
+
+    {
+        let render_task = render_task.clone();
+        use_effect_with((), move |_| {
+            render_task.run();
+            || ()
+        });
+    }
+
+    html! {
+        <div style="display: flex; flex-direction: column; align-items: center; color: #fff; margin: 1em; user-select: none;">
+            <div style={format!("font-size: {}px; margin-bottom: 0.25em;", (width as f32).sqrt().round() * 1.2)}>{name}</div>
+            <div style={format!("font-size: {}px; margin-bottom: 1em;", (width as f32).sqrt().round() * 0.5)}>{subtitle}</div>
             <div style="margin:2em;" id={chart_id.clone()} />
         </div>
     }

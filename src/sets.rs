@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use yew::{Html, Properties, function_component, html};
 
-use crate::pie::{LargeSetPieChart, SetPieChart};
+use crate::graph::{LargeBarGraph, LargeSetPieChart, SetPieChart};
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct SetsPageProps {
@@ -31,6 +31,28 @@ pub fn sets_page(props: &SetsPageProps) -> Html {
 
     html! {
         <div style="width: 100%; display: flex; flex-direction: column; gap: 2rem; align-items: center; color: #fff;">
+            // <LargeSetPieChart
+            //     master_table={master_table.clone()}
+            //     partitions={vec![27]}
+            //     top_n={24}
+            //     chart_id={"topsets_latest".to_string()}
+            //     width={1500}
+            //     height={900}
+            // />
+
+            <LargeBarGraph
+                master_table={master_table.clone()}
+                partitions={vec![27]}
+                top_n={24}
+                chart_id={"topsets_bar".to_string()}
+                width={1500}
+                height={900}
+            />
+
+            <div style="font-size: 2rem; margin: 1rem; font-weight: bold; user-select: none; text-align: center;">{"Top 12 Most Frequently Used Parse Sets By Patch"}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; width: 100%;">
+                { set_charts }
+            </div>
             <LargeSetPieChart
                 master_table={master_table.clone()}
                 partitions={vec![]}
@@ -39,10 +61,6 @@ pub fn sets_page(props: &SetsPageProps) -> Html {
                 width={1500}
                 height={900}
             />
-            <div style="font-size: 2rem; margin: 1rem; font-weight: bold; user-select: none; text-align: center;">{"Top 12 Most Frequently Used Parse Sets By Patch"}</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; width: 100%;">
-                { set_charts }
-            </div>
         </div>
     }
 }

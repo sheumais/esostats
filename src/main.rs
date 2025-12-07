@@ -4,7 +4,7 @@ use yew_icons::{Icon, IconId};
 use crate::{players::PlayersPage, sets::SetsPage, skills::SkillsPage};
 
 mod data;
-mod pie;
+mod graph;
 mod players;
 mod skills;
 mod sets;
