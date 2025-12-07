@@ -27,7 +27,7 @@ let master_table = props.master_table.clone();
                 height={300}
             />
         }
-    }).collect();
+    }).rev().collect();
 
 
     html! {

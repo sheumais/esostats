@@ -14,21 +14,19 @@ pub master_table: Rc<crate::data::MasterTable>,
 pub fn sets_page(props: &SetsPageProps) -> Html {
     let master_table = props.master_table.clone();
 
-
     let set_charts: Html = (1..28)
     .map(|i| {
-    html! {
-    <SetPieChart
-    master_table={master_table.clone()}
-    partitions={vec![i]}
-    top_n={12}
-    chart_id={format!("topsets_{}", i)}
-    width={500}
-    height={300}
-    />
-    }
-    })
-    .collect();
+        html! {
+            <SetPieChart
+                master_table={master_table.clone()}
+                partitions={vec![i]}
+                top_n={12}
+                chart_id={format!("topsets_{}", i)}
+                width={500}
+                height={300}
+            />
+        }
+    }).rev().collect();
 
 
     html! {
