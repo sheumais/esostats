@@ -1,11 +1,10 @@
 use std::rc::Rc;
 use charming::{
-    Chart, WasmRenderer, component::{Axis, Legend, LegendType}, datatype::DataPointItem, element::{AxisLabel, AxisTick, Color, Formatter, ItemStyle, JsFunction, Label, LabelAlign, LabelLine, LabelPosition, LineStyle, NameLocation, Orient, TextStyle, Tooltip, Trigger}, series::{Align, Bar, Pie}
+    Chart, WasmRenderer, component::{Axis, Legend, LegendType}, datatype::DataPointItem, element::{AxisLabel, Color, ItemStyle, JsFunction, Label, LabelAlign, LabelLine, LabelPosition, LineStyle, NameLocation, Orient, TextStyle, Tooltip, Trigger}, series::{Bar, Pie}
 };
-use web_sys::FormData;
 use yew::prelude::*;
 
-use crate::data::{partition_to_name, partition_to_update_id};
+use crate::{data::{Player, partition_to_name, partition_to_update_id}, players::hodor_name_to_html};
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct PieChartProps {
@@ -163,6 +162,30 @@ pub fn build_large_bar_graph_from_data(chart_data: Vec<(f64, String)>, chart_col
 
 }
 
+pub fn build_large_bar_graph_skills_from_data(chart_data: Vec<(f64, String)>, chart_colors: Vec<Color>) -> Chart {
+    let labels: Vec<String> = chart_data.iter().map(|(_, lbl)| lbl.clone()).collect();
+
+    let data_points: Vec<DataPointItem> = chart_data
+        .iter()
+        .enumerate()
+        .map(|(idx, (val, _))| {
+            let color = chart_colors.get(idx).cloned().unwrap_or(Color::from("#000000"));
+            DataPointItem::new(*val).item_style(ItemStyle::new().color(color))
+        })
+        .collect();
+
+    let chart = Chart::new()
+        .x_axis(Axis::new().data(labels).name("Skill Name").name_location(NameLocation::Center).name_text_style(TextStyle::new().font_family("TF2Build").font_size(24).color("#fff")).axis_label(AxisLabel::new().show(false)))
+        .y_axis(Axis::new().name("Percent of Parses Using The Skill").name_location(NameLocation::Center).name_gap(45).name_text_style(TextStyle::new().font_family("TF2Build").font_size(24).color("#fff")).max_interval(10).max(100).axis_label(AxisLabel::new().color("#fff").font_family("TF2Build").font_size(16)))
+        .series(Bar::new().data(data_points).label(Label::new().show(true).position(LabelPosition::Top).align(LabelAlign::Left).color("#fff").font_family("TF2Build").font_size(16).formatter("  {b}").rotate("35").offset((-10, 0))))
+        .color(chart_colors)
+        .tooltip(percent_tooltip())
+        .legend(Legend::new().show(false));
+
+    chart
+
+}
+
 #[function_component(SkillPieChart)]
 pub fn skill_pie_chart(props: &PieChartProps) -> Html {
     let master_table = props.master_table.clone();
@@ -173,7 +196,7 @@ pub fn skill_pie_chart(props: &PieChartProps) -> Html {
     let width = props.width;
     let height = props.height;
 
-    let name = compute_title(&partitions, "Top 75 Most Used Skills (All Recorded Patches)");
+    let name = compute_title(&partitions, "Top 75 Most Used Skills (All Patches)");
 
     let render_task = yew_hooks::use_async(async move {
         let renderer = WasmRenderer::new(width, height);
@@ -212,7 +235,7 @@ pub fn set_pie_chart(props: &PieChartProps) -> Html {
     let width = props.width;
     let height = props.height;
 
-    let name = compute_title(&partitions, "Top 50 Most Used Sets (All Recorded Patches)");
+    let name = compute_title(&partitions, "Top 50 Most Used Sets (All Patches)");
 
     let render_task = yew_hooks::use_async(async move {
         let renderer = WasmRenderer::new(width, height);
@@ -251,8 +274,8 @@ pub fn large_skill_pie_chart(props: &PieChartProps) -> Html {
     let width = props.width;
     let height = props.height;
 
-    let name = compute_title(&partitions, "Top 75 Most Used Skills");
-    let subtitle = format!("data from top 100 parses on every boss in every applicable patch on esologs, normalised between patches");
+    let name = compute_title(&partitions, "Top 75 Most Used Skills (All Patches)");
+    let subtitle = format!("data from top 100 parses on every boss in every patch on esologs, normalised between patches");
 
     let render_task = yew_hooks::use_async(async move {
         let renderer = WasmRenderer::new(width, height);
@@ -292,8 +315,8 @@ pub fn large_set_pie_chart(props: &PieChartProps) -> Html {
     let width = props.width;
     let height = props.height;
 
-    let name = compute_title(&partitions, "Top 50 Most Used Sets");
-    let subtitle = format!("data from top 100 parses on every boss in every applicable patch on esologs, normalised between patches");
+    let name = compute_title(&partitions, "Top 50 Most Used Sets (All Patches)");
+    let subtitle = format!("data from top 100 parses on every boss in every patch on esologs, normalised between patches");
 
     let render_task = yew_hooks::use_async(async move {
         let renderer = WasmRenderer::new(width, height);
@@ -323,7 +346,7 @@ pub fn large_set_pie_chart(props: &PieChartProps) -> Html {
     }
 }
 
-#[function_component(LargeBarGraph)]
+#[function_component(LargeSetsBarGraph)]
 pub fn large_bar_graph(props: &PieChartProps) -> Html {
     let master_table = props.master_table.clone();
     let partitions = props.partitions.clone();
@@ -334,7 +357,7 @@ pub fn large_bar_graph(props: &PieChartProps) -> Html {
     let height = props.height;
 
     let name = format!("Percentage of Boss Parses Using Each Set (U{})", partition_to_update_id(partitions[0]));
-    let subtitle = format!("data from top 100 parses on every boss in every applicable patch on esologs, normalised between patches");
+    let subtitle = format!("data from top 100 parses on every boss this patch");
 
     let render_task = yew_hooks::use_async(async move {
         let renderer = WasmRenderer::new(width, height);
@@ -361,5 +384,78 @@ pub fn large_bar_graph(props: &PieChartProps) -> Html {
             <div style={format!("font-size: {}px; margin-bottom: 1em;", (width as f32).sqrt().round() * 0.5)}>{subtitle}</div>
             <div style="margin:2em;" id={chart_id.clone()} />
         </div>
+    }
+}
+
+#[function_component(LargeSkillsBarGraph)]
+pub fn large_bar_graph(props: &PieChartProps) -> Html {
+    let master_table = props.master_table.clone();
+    let partitions = props.partitions.clone();
+    let top_n = props.top_n;
+    let chart_id = props.chart_id.clone();
+    let chart_id_clone = chart_id.clone();
+    let width = props.width;
+    let height = props.height;
+
+    let name = format!("Percentage of Boss Parses Using Each Skill (U{})", partition_to_update_id(partitions[0]));
+    let subtitle = format!("data from top 100 parses on every boss this patch");
+
+    let render_task = yew_hooks::use_async(async move {
+        let renderer = WasmRenderer::new(width, height);
+        let (chart_data, chart_colors) =
+            crate::data::top_n_skills_percentage_chart_vectors(&master_table, &partitions, top_n);
+
+        let chart = build_large_bar_graph_skills_from_data(chart_data, chart_colors);
+
+        renderer.render(&chart_id_clone, &chart).unwrap();
+        Ok::<(), ()>(())
+    });
+
+    {
+        let render_task = render_task.clone();
+        use_effect_with((), move |_| {
+            render_task.run();
+            || ()
+        });
+    }
+
+    html! {
+        <div style="display: flex; flex-direction: column; align-items: center; color: #fff; margin: 1em; user-select: none;">
+            <div style={format!("font-size: {}px; margin-bottom: 0.25em;", (width as f32).sqrt().round() * 1.2)}>{name}</div>
+            <div style={format!("font-size: {}px; margin-bottom: 1em;", (width as f32).sqrt().round() * 0.5)}>{subtitle}</div>
+            <div style="margin:2em;" id={chart_id.clone()} />
+        </div>
+    }
+}
+
+#[derive(Properties, PartialEq, Clone)]
+pub struct TopPlayersProps {
+    pub rows: Vec<(u64, Player)>,
+}
+
+
+#[function_component(TopPlayersTable)]
+pub fn top_players_table(props: &TopPlayersProps) -> Html {
+    html! {
+        <table style="margin-left: auto; margin-right: auto; margin-top: 1em; font-size: 2em;">
+            <thead style="color: #fff; text-align: center;">
+                <tr>
+                    <th style="width: 25%">{"Rank"}</th>
+                    <th style="width: 50%">{"Player"}</th>
+                    <th style="width: 25%">{"#1 Rankings"}</th>
+                </tr>
+            </thead>
+            <tbody style="color: #fff; text-align: center;">
+                { for props.rows.iter().enumerate().map(|(i, (count, player))|
+                    html! {
+                        <tr>
+                            <td> { format!("{}.", i + 1) } </td>
+                            <td> { hodor_name_to_html(if player.text.is_empty() {&player.name} else { &player.text }) } </td>
+                            <td> { count } </td>
+                        </tr>
+                    }
+                ) }
+            </tbody>
+        </table>
     }
 }

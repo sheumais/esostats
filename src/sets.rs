@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use yew::{Html, Properties, function_component, html};
 
-use crate::graph::{LargeBarGraph, LargeSetPieChart, SetPieChart};
+use crate::graph::{LargeSetsBarGraph, LargeSetPieChart, SetPieChart};
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct SetsPageProps {
@@ -40,7 +40,7 @@ pub fn sets_page(props: &SetsPageProps) -> Html {
             //     height={900}
             // />
 
-            <LargeBarGraph
+            <LargeSetsBarGraph
                 master_table={master_table.clone()}
                 partitions={vec![27]}
                 top_n={24}

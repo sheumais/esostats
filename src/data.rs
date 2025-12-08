@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, fs::{self, File}, io::Write, path::Path};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, fs::{self, File}, io::Write, path::Path};
 use bitcode::*;
 use charming::{element::Color, series::{SankeyLink, SankeyNode}};
 use regex::Regex;
@@ -1152,49 +1152,106 @@ pub fn top_n_players_by_average_rank(master: &MasterTable, partition_filter: &[u
         .collect()
 }
 
-pub fn top_n_players_by_top_k_count(master: &MasterTable, partition_filter: &[u8], n: usize, k: u32) -> Vec<(u64, String)> {
+pub fn top_n_players_by_top_k_count(master: &MasterTable, partition_filter: &[u8], n: usize, k: u32) -> Vec<(u64, Player)> {
     let filter: Option<HashSet<u8>> = if partition_filter.is_empty() {
         None
     } else {
         Some(partition_filter.iter().copied().collect())
     };
 
-    let mut agg: HashMap<u32, u64> = HashMap::new();
+    let mut total_rows: HashMap<u32, u64> = HashMap::new();
     for row in &master.rows {
         if let Some(ref f) = filter {
             if !f.contains(&row.partition_id) {
                 continue;
             }
         }
+        *total_rows.entry(row.player_id).or_insert(0) += 1;
+    }
 
+    let mut counts_k: HashMap<u32, u64> = HashMap::new();
+    for row in &master.rows {
+        if let Some(ref f) = filter {
+            if !f.contains(&row.partition_id) {
+                continue;
+            }
+        }
         if (row.ranking as u32) <= k {
-            *agg.entry(row.player_id).or_insert(0) += 1;
+            *counts_k.entry(row.player_id).or_insert(0) += 1;
         }
     }
 
-    let id_to_name: HashMap<u32, String> = master
-        .players
+    let mut players: Vec<(u32, u64)> = counts_k
         .iter()
-        .filter(|p| !p.name.is_empty())
-        .map(|p| (p.id, p.name.clone()))
+        .map(|(pid, c)| (*pid, *c))
+        .filter(|(_, c)| *c > 0)
         .collect();
 
-    let mut pairs: Vec<(u64, String)> = agg
-        .into_iter()
-        .filter_map(|(player_id, count)| {
-            if count == 0 {
-                return None;
+    players.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let cutoff_count = if players.len() >= n {
+        players[n - 1].1
+    } else {
+        0
+    };
+
+    let tied_ids: Vec<u32> = players
+        .iter()
+        .filter(|(_, c)| *c == cutoff_count)
+        .map(|(pid, _)| *pid)
+        .collect();
+
+    let mut counts_km1: HashMap<u32, u64> = HashMap::new();
+
+    if k > 1 {
+        let new_k = k - 1;
+
+        for row in &master.rows {
+            if tied_ids.contains(&row.player_id) {
+                if let Some(ref f) = filter {
+                    if !f.contains(&row.partition_id) {
+                        continue;
+                    }
+                }
+                if (row.ranking as u32) <= new_k {
+                    *counts_km1.entry(row.player_id).or_insert(0) += 1;
+                }
             }
-            id_to_name.get(&player_id).map(|name| (count, name.clone()))
-        })
-        .collect();
+        }
+    }
 
-    pairs.sort_by(|a, b| {
-        b.0.cmp(&a.0)
-            .then_with(|| a.1.cmp(&b.1))
+    players.sort_by(|(pid_a, c_a), (pid_b, c_b)| {
+        let ord = c_b.cmp(c_a);
+        if ord != Ordering::Equal {
+            return ord;
+        }
+
+        let tka = counts_km1.get(pid_a).copied().unwrap_or(0);
+        let tkb = counts_km1.get(pid_b).copied().unwrap_or(0);
+        let ord2 = tkb.cmp(&tka);
+        if ord2 != Ordering::Equal {
+            return ord2;
+        }
+
+        let ra = total_rows.get(pid_a).copied().unwrap_or(0);
+        let rb = total_rows.get(pid_b).copied().unwrap_or(0);
+        let ord3 = rb.cmp(&ra);
+        if ord3 != Ordering::Equal {
+            return ord3;
+        }
+
+        pid_a.cmp(pid_b)
     });
 
-    pairs.into_iter().take(n).collect()
+    players
+        .into_iter()
+        .take(n)
+        .map(|(pid, count)| {
+            let p = master.players[pid as usize - 1].clone();
+            (count, p)
+        })
+        .filter(|(_, p)| !p.name.is_empty())
+        .collect()
 }
 
 pub fn player_rows(master: &MasterTable, player_id: u32) -> Vec<TableRow> {
@@ -1208,15 +1265,12 @@ pub fn player_rows(master: &MasterTable, player_id: u32) -> Vec<TableRow> {
 }
 
 pub fn percent_players_with_sets(master: &MasterTable, partition_filter: &[u8]) -> Vec<(ItemSet, f64)> {
-    // Build optional partition filter set
     let filter: Option<HashSet<u8>> = if partition_filter.is_empty() {
         None
     } else {
         Some(partition_filter.iter().copied().collect())
     };
 
-    // Collect all set ids by normalized name (strip "Perfected ").
-    // Store (id, is_perfected) so we can pick a non-perfected id as canonical if present.
     let mut name_to_ids: HashMap<String, Vec<(u16, bool)>> = HashMap::new();
     for s in &master.sets {
         let raw_name = &s.name;
@@ -1225,8 +1279,6 @@ pub fn percent_players_with_sets(master: &MasterTable, partition_filter: &[u8]) 
         name_to_ids.entry(normalized).or_default().push((s.id, is_perfected));
     }
 
-    // Create canonical mapping: every id -> chosen base id.
-    // Choose a non-perfected id as the base if one exists; otherwise pick the first encountered id.
     let mut canonical_id: HashMap<u16, u16> = HashMap::new();
     for (_normalized_name, ids_vec) in name_to_ids.into_iter() {
         let base_id = ids_vec
@@ -1240,7 +1292,6 @@ pub fn percent_players_with_sets(master: &MasterTable, partition_filter: &[u8]) 
         }
     }
 
-    // Frequency counting
     let mut freq: HashMap<u16, u32> = HashMap::new();
     let mut total_rows_included: u32 = 0;
     let mut players_with_any_set: u32 = 0;
@@ -1267,7 +1318,6 @@ pub fn percent_players_with_sets(master: &MasterTable, partition_filter: &[u8]) 
         players_with_any_set = players_with_any_set.saturating_add(1);
 
         for original_id in unique_sets {
-            // map to canonical/base id if available, otherwise use the original id
             let base_id = canonical_id.get(&original_id).copied().unwrap_or(original_id);
             *freq.entry(base_id).or_insert(0) += 1;
         }
@@ -1314,6 +1364,87 @@ pub fn top_n_sets_percentage_chart_vectors(
     for (set, pct) in top_sets.into_iter().take(n) {
         data.push((pct, set.name.clone()));
         colours.push(colour_from_set(&set));
+    }
+
+    (data, colours)
+}
+
+pub fn percent_players_with_skills(master: &MasterTable, partition_filter: &[u8]) -> Vec<(Skill, f64)> {
+    let filter: Option<HashSet<u8>> = if partition_filter.is_empty() {
+        None
+    } else {
+        Some(partition_filter.iter().copied().collect())
+    };
+
+    let mut freq: HashMap<u16, u32> = HashMap::new();
+    let mut total_rows_included: u32 = 0;
+    let mut players_with_any_skill: u32 = 0;
+
+    for row in &master.rows {
+        let include = match &filter {
+            Some(set) => set.contains(&row.partition_id),
+            None => true,
+        };
+
+        if !include {
+            continue;
+        }
+
+        total_rows_included = total_rows_included.saturating_add(1);
+
+        let unique_skills: HashSet<u16> = row.skills.iter().copied().collect();
+
+        if unique_skills.is_empty() {
+            continue;
+        }
+
+        players_with_any_skill = players_with_any_skill.saturating_add(1);
+
+        for skill_id in unique_skills {
+            *freq.entry(skill_id).or_insert(0) += 1;
+        }
+    }
+
+    if players_with_any_skill == 0 {
+        return Vec::new();
+    }
+
+    let skill_lookup: HashMap<u16, Skill> = master
+        .skills
+        .iter()
+        .cloned()
+        .map(|s| (s.id, s))
+        .collect();
+
+    let mut results: Vec<(Skill, f64)> = freq
+        .into_iter()
+        .map(|(id, count)| {
+            let pct = (count as f64) * 100.0 / (players_with_any_skill as f64);
+            let skill = skill_lookup.get(&id).cloned().unwrap_or(Skill {
+                id,
+                name: format!("Unknown ({})", id),
+                class: None,
+                tree: None,
+                display_name: None,
+            });
+            (skill, pct)
+        })
+        .collect();
+
+    results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    results
+}
+
+pub fn top_n_skills_percentage_chart_vectors(master: &MasterTable, partition_filter: &[u8], n: usize) -> (Vec<(f64, String)>, Vec<Color>) {
+    let top_sets = percent_players_with_skills(master, partition_filter);
+
+    let mut data: Vec<(f64, String)> = Vec::new();
+    let mut colours: Vec<Color> = Vec::new();
+
+    for (skill, pct) in top_sets.into_iter().take(n) {
+        data.push((pct, skill.display_name.clone().unwrap_or_else(|| skill.name.clone())));
+        colours.push(colour_from_skill(&skill));
     }
 
     (data, colours)

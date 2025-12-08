@@ -4,7 +4,7 @@ use yew::prelude::*;
 use web_sys::{KeyboardEvent, InputEvent};
 
 
-use crate::data::{self, MasterTable, TableRow, boss_to_boss_name, partition_to_name};
+use crate::{data::{self, MasterTable, TableRow, boss_to_boss_name, partition_to_name, top_n_players_by_top_k_count}, graph::TopPlayersTable};
 
 fn create_player_row(_master: &MasterTable, row: TableRow) -> Html {
     let dps = row.dps;
@@ -53,6 +53,23 @@ pub fn hodor_name_to_html(input: &str) -> Html {
                         match chars.next() {
                             Some('|') => {
                                 if let Some('l') = chars.peek() {
+                                    chars.next();
+                                    break;
+                                }
+                            }
+                            Some(_) => continue,
+                            None => break,
+                        }
+                    }
+                }
+
+                Some('t') => {
+                    chars.next();
+
+                    loop {
+                        match chars.next() {
+                            Some('|') => {
+                                if let Some('t') = chars.peek() {
                                     chars.next();
                                     break;
                                 }
@@ -157,70 +174,70 @@ pub fn players_page(props: &PlayersPageProps) -> Html {
 
 
     let player_data: Html = if let Some(player_id) = *selected_player {
-    let mut rows: Vec<&data::TableRow> = master_table
-        .rows
-        .iter()
-        .filter(|p| p.player_id == player_id)
-        .collect();
+        let mut rows: Vec<&data::TableRow> = master_table
+            .rows
+            .iter()
+            .filter(|p| p.player_id == player_id)
+            .collect();
 
 
-    rows.sort_by(|a, b| {
-        b.partition_id
-        .cmp(&a.partition_id)
-        .then(a.ranking.cmp(&b.ranking))
-        .then(b.dps.cmp(&a.dps))
-    });
+        rows.sort_by(|a, b| {
+            b.partition_id
+            .cmp(&a.partition_id)
+            .then(a.ranking.cmp(&b.ranking))
+            .then(b.dps.cmp(&a.dps))
+        });
 
 
-    let mut last_partition: Option<u8> = None;
-    let mut children: Vec<Html> = Vec::new();
+        let mut last_partition: Option<u8> = None;
+        let mut children: Vec<Html> = Vec::new();
 
 
-    let player_text = &master_table.players[player_id as usize - 1].text;
-    let player_name_html = if player_text.is_empty() {
-        html! { &master_table.players[player_id as usize - 1].name }
-    } else {
-        hodor_name_to_html(&player_text)
-    };
+        let player_text = &master_table.players[player_id as usize - 1].text;
+        let player_name_html = if player_text.is_empty() {
+            html! { &master_table.players[player_id as usize - 1].name }
+        } else {
+            hodor_name_to_html(&player_text)
+        };
 
 
-    for r in rows {
-        if r.ranking > 25 { continue; }
-        if Some(r.partition_id) != last_partition {
-            last_partition = Some(r.partition_id);
-            let partition_label = partition_to_name(r.partition_id);
+        for r in rows {
+            if r.ranking > 25 { continue; }
+            if Some(r.partition_id) != last_partition {
+                last_partition = Some(r.partition_id);
+                let partition_label = partition_to_name(r.partition_id);
 
 
-            children.push(
-                html! {
-                    <span style="font-size: 2em; margin: 0.5em;">{ partition_label }</span>
-                }
-            );
+                children.push(
+                    html! {
+                        <span style="font-size: 2em; margin: 0.5em;">{ partition_label }</span>
+                    }
+                );
+            }
+
+
+            children.push(create_player_row(&master_table, r.clone()));
         }
 
 
-        children.push(create_player_row(&master_table, r.clone()));
-    }
+        if children.is_empty() {
+            children.push(html!{<div style="font-size: 1.5em;">{"No Results"}</div>})
+        }
 
 
-    if children.is_empty() {
-        children.push(html!{<div style="font-size: 1.5em;">{"No Results"}</div>})
-    }
-
-
-    html! {
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; color: #fff;">
-        <div style="font-size: 5em;">{ player_name_html }</div>
-            { for children }
-        </div>
-    }
+        html! {
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; color: #fff;">
+            <div style="font-size: 5em;">{ player_name_html }</div>
+                { for children }
+            </div>
+        }
     } else {
         html! { "" }
     };
 
     html! {
         <div>
-            <div style="width: max-content; color: #fff; width: max-content; color: #fff; display: flex; flex-direction: column; align-items: center;">
+            <div style="width: max-content; color: #fff; width: max-content; color: #fff; display: flex; flex-direction: column; align-items: center; margin: auto;">
             <div style="font-size: 3rem; margin: 1rem; font-weight: bold; user-select: none; text-align: left; color: #fff;">{"Search DPS Players"}</div>
                 <input
                     type="text"
@@ -251,10 +268,15 @@ pub fn players_page(props: &PlayersPageProps) -> Html {
                     </ul>
                 }
             </div>
-
-            <div style="flex: 1 1 30em;">
-                { player_data }
-            </div>
+            if let Some(_) = *selected_player {
+                <div style="flex: 1 1 30em;">
+                    { player_data }
+                </div>
+            } else {
+                <TopPlayersTable
+                    rows={top_n_players_by_top_k_count(&master_table, &[], 101, 1)}
+                />
+            }
         </div>
     }
 }
