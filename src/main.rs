@@ -54,7 +54,7 @@ pub fn app() -> Html {
                 <a href={"https://discord.gg/FjJjXHjUQ4"} target="_blank" rel="noopener noreferrer">
                     <Icon icon_id={IconId::BootstrapDiscord} style={r#"width: 3em; height: 3em; color: #fff; cursor: pointer;"#} />
                 </a>
-                <a href={"https://github.com/sheumais/"} target="_blank" rel="noopener noreferrer">
+                <a href={"https://github.com/sheumais/esostats/"} target="_blank" rel="noopener noreferrer">
                     <Icon icon_id={IconId::BootstrapGithub} style={r#"width: 3em; height: 3em; color: #fff; cursor: pointer;"#} />
                 </a>
             </div>

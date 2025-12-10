@@ -440,16 +440,16 @@ pub fn top_players_table(props: &TopPlayersProps) -> Html {
         <table style="margin-left: auto; margin-right: auto; margin-top: 1em; font-size: 2em;">
             <thead style="color: #fff; text-align: center;">
                 <tr>
-                    <th style="width: 25%">{"Rank"}</th>
-                    <th style="width: 50%">{"Player"}</th>
-                    <th style="width: 25%">{"#1 Rankings"}</th>
+                    // <th style="width: 25%">{"Rank"}</th>
+                    <th style="width: 60%">{"Player"}</th>
+                    <th style="width: 40%">{"#1 Rankings"}</th>
                 </tr>
             </thead>
             <tbody style="color: #fff; text-align: center;">
                 { for props.rows.iter().enumerate().map(|(i, (count, player))|
                     html! {
                         <tr>
-                            <td> { format!("{}.", i + 1) } </td>
+                            // <td> { format!("{}.", i + 1) } </td>
                             <td> { hodor_name_to_html(if player.text.is_empty() {&player.name} else { &player.text }) } </td>
                             <td> { count } </td>
                         </tr>
