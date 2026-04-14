@@ -207,6 +207,7 @@ pub fn partition_to_name(partition_id: u8) -> String {
         25 => "Western Solstice (Update 46)",
         26 => "Feast of Shadows (Update 47)",
         27 => "Eastern Solstice (Update 48)",
+        28 => "Season Zero: Dawn and Dusk (Update 49)",
         _ => "Unknown Partition",
     };
     partition_name.to_string()
@@ -241,6 +242,7 @@ pub fn partition_to_update_id(partition_id: u8) -> String {
         25 => "46",
         26 => "47",
         27 => "48",
+        28 => "49",
         _ => "Unknown Partition",
     };
     partition_name.to_string()
@@ -486,9 +488,9 @@ pub fn process_data_into_master_table_serialized() {
         let partition_id: u8 = entry.partition as u8;
 
         let skill_ids: Vec<u16> = entry.talents.iter().map(|e| {
-            let e = e.strip_suffix(".png").unwrap_or(e);
-            let e = e.strip_prefix("ability_").unwrap_or(e);
-            let skill_name = e.to_string();
+            let basename = e.rsplit('/').next().unwrap_or(e);
+            let basename = basename.strip_suffix(".png").unwrap_or(basename);
+            let skill_name = basename.strip_prefix("ability_").unwrap_or(basename).to_string();
             get_skill_id(skill_name)
         }).collect();
 
@@ -522,7 +524,7 @@ pub fn process_data_into_master_table_serialized() {
         process_entry(entry, true);
     }
 
-    let hodor_dir = r"..\Elder Scrolls Online\live\AddOns\LibCustomNames\PC\names";
+    let hodor_dir = r"..\..\Elder Scrolls Online\live\AddOns\LibCustomNames\PC\names";
     let hodor_players = read_players_from_folder(hodor_dir)
         .expect("Failed reading Hodor player files");
 

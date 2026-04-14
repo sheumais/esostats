@@ -14,7 +14,7 @@ pub master_table: Rc<crate::data::MasterTable>,
 pub fn sets_page(props: &SetsPageProps) -> Html {
     let master_table = props.master_table.clone();
 
-    let set_charts: Html = (1..28)
+    let set_charts: Html = (1..29)
     .map(|i| {
         html! {
             <SetPieChart
@@ -42,7 +42,7 @@ pub fn sets_page(props: &SetsPageProps) -> Html {
 
             <LargeSetsBarGraph
                 master_table={master_table.clone()}
-                partitions={vec![27]}
+                partitions={vec![28]}
                 top_n={24}
                 chart_id={"topsets_bar".to_string()}
                 width={1500}

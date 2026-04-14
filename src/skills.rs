@@ -15,7 +15,7 @@ pub fn skills_page(props: &SkillsPageProps) -> Html {
 let master_table = props.master_table.clone();
 
 
-    let skill_charts: Html = (1..28)
+    let skill_charts: Html = (1..29)
     .map(|i| {
         html! {
             <SkillPieChart
@@ -43,7 +43,7 @@ let master_table = props.master_table.clone();
 
             <LargeSkillsBarGraph
                 master_table={master_table.clone()}
-                partitions={vec![27]}
+                partitions={vec![28]}
                 top_n={36}
                 chart_id={"topskills_bar".to_string()}
                 width={1500}
