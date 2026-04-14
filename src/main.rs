@@ -65,4 +65,5 @@ pub fn app() -> Html {
 fn main() {
     yew::Renderer::<App>::new().render();
     // data::process_data_into_master_table_serialized()
+    // data::convert_json_to_binary("data/master_table.json", "data/master_table.bin");
 }

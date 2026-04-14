@@ -561,6 +561,24 @@ pub fn process_data_into_master_table_serialized() {
     );
 }
 
+pub fn convert_json_to_binary(json_path: &str, bin_path: &str) {
+    let json_text = std::fs::read_to_string(json_path)
+        .unwrap_or_else(|e| panic!("failed to read {json_path}: {e}"));
+
+    let master: MasterTable = serde_json::from_str(&json_text)
+        .unwrap_or_else(|e| panic!("failed to deserialize JSON from {json_path}: {e}"));
+
+    let encoded = bitcode::encode(&master);
+
+    std::fs::write(bin_path, &encoded)
+        .unwrap_or_else(|e| panic!("failed to write {bin_path}: {e}"));
+
+    println!(
+        "Converted {json_path} -> {bin_path}. Rows: {}, Players: {}, Skills: {}, Sets: {}",
+        master.rows.len(), master.players.len(), master.skills.len(), master.sets.len()
+    );
+}
+
 const MASTER_TABLE_BYTES: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/data/master_table.bin"));
 
 pub fn load_master_table() -> MasterTable {
