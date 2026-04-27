@@ -605,8 +605,12 @@ pub fn top_n_skills_for_partitions(master: &MasterTable, partition_filter: &[u8]
         };
 
         if include {
+            let mut skill_set: HashSet<u16> = HashSet::new();
             for skill_id in &row.skills {
-                *freq.entry(*skill_id).or_insert(0) += 1;
+                skill_set.insert(*skill_id);
+            }
+            for skill in skill_set {
+                *freq.entry(skill).or_insert(0) += 1;
             }
         }
     }
@@ -665,8 +669,12 @@ pub fn top_n_skills_for_partitions_normalised(master: &MasterTable, partition_fi
             .entry(row.partition_id)
             .or_insert_with(HashMap::new);
 
+        let mut skill_set: HashSet<u16> = HashSet::new();
         for skill_id in &row.skills {
-            *skill_map.entry(*skill_id).or_insert(0) += 1;
+            skill_set.insert(*skill_id);
+        }
+        for skill in skill_set {
+            *skill_map.entry(skill).or_insert(0) += 1;
         }
     }
 
