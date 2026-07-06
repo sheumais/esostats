@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use yew::{Html, Properties, function_component, html};
 
-use crate::graph::{LargeSetsBarGraph, LargeSetPieChart, SetPieChart};
+use crate::{UPDATE_NEWEST, graph::{LargeSetPieChart, LargeSetsBarGraph, SetPieChart}};
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct SetsPageProps {
@@ -14,7 +14,7 @@ pub master_table: Rc<crate::data::MasterTable>,
 pub fn sets_page(props: &SetsPageProps) -> Html {
     let master_table = props.master_table.clone();
 
-    let set_charts: Html = (1..29)
+    let set_charts: Html = (1..UPDATE_NEWEST)
     .map(|i| {
         html! {
             <SetPieChart
@@ -42,7 +42,7 @@ pub fn sets_page(props: &SetsPageProps) -> Html {
 
             <LargeSetsBarGraph
                 master_table={master_table.clone()}
-                partitions={vec![28]}
+                partitions={vec![(UPDATE_NEWEST-1)]}
                 top_n={24}
                 chart_id={"topsets_bar".to_string()}
                 width={1500}

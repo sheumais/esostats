@@ -208,6 +208,7 @@ pub fn partition_to_name(partition_id: u8) -> String {
         26 => "Feast of Shadows (Update 47)",
         27 => "Eastern Solstice (Update 48)",
         28 => "Season Zero: Dawn and Dusk (Update 49)",
+        29 => "Update 50",
         _ => "Unknown Partition",
     };
     partition_name.to_string()
@@ -243,6 +244,7 @@ pub fn partition_to_update_id(partition_id: u8) -> String {
         26 => "47",
         27 => "48",
         28 => "49",
+        29 => "50",
         _ => "Unknown Partition",
     };
     partition_name.to_string()
@@ -524,7 +526,7 @@ pub fn process_data_into_master_table_serialized() {
         process_entry(entry, true);
     }
 
-    let hodor_dir = r"..\..\Elder Scrolls Online\live\AddOns\LibCustomNames\PC\names";
+    let hodor_dir = r"..\Elder Scrolls Online\live\AddOns\LibCustomNames\PC\names";
     let hodor_players = read_players_from_folder(hodor_dir)
         .expect("Failed reading Hodor player files");
 
@@ -778,6 +780,7 @@ pub fn colour_from_skill(skill: &Skill) -> Color {
             Some("Assault")        => "#FA8072",
             Some("Support")        => "#87CEFA",
             Some("Soul Magic")     => "#800080",
+            Some("Werewolf")       => "#A0522D",
             _ => "#B2B2B2",
         },
 
@@ -1037,7 +1040,7 @@ pub fn top_n_sets_for_partitions_normalised(master: &MasterTable, partition_filt
 pub fn colour_from_set(set: &ItemSet) -> Color {
     let hex = match set.id {
         83 => "#CF6A32", // Elf Bane
-        127 => "#476291", // Deadly Strike
+        127 | 727 => "#476291", // Deadly Strike, Monolith of Storms
         137 => "#D32CE6", // Berserking Warrior (Advancing Yokeda)
         // 147 => "#38F3AB", // Way of Martial Knowledge
         // 205 => "#4B69FF", // Willpower
@@ -1045,10 +1048,10 @@ pub fn colour_from_set(set: &ItemSet) -> Color {
         292 => "#8650AC", // Mother's Sorrow
         304 => "#70B04A", // Medusa
         // 332 => "#AA0000", // Master Architect
-        336 => "#A32C2E", // Pillar of Nirn
+        336 | 403 => "#A32C2E", // Pillar of Nirn, Savage Werewolf
         338 => "#CF6A32", // Flame Blossom
         353 => "#4B69FF", // Mechanical Acuity
-        389 | 393 => "#FFD700", // Arms of Relequen
+        389 | 393 | 781 => "#FFD700", // Arms of Relequen, Aerie's Cry
         390 | 394 => "#F4A460", // Mantle of Siroria
         430 => "#DAA520", // Tzogvin's Warband
         444 | 449 => "#00BFFF", // False God's Devotion
@@ -1061,8 +1064,8 @@ pub fn colour_from_set(set: &ItemSet) -> Color {
         584 => "#48D1CC", // Diamond's Victory
         586 | 589 => "#70B04A", // Sul-Xan's Torment
         587 | 591 => "#50A7FC", // Bahsei's Mania
+        647 | 652 | 775 => "#96DA43", // Coral Riptide, Spattering
         646 | 653 => "#4B69FF", // Whorl of the Depths
-        647 | 652 => "#96DA43", // Coral Riptide
         684 => "#FF4500", // Runecarver's Blaze
         702 | 707 => "#2F4F4F", // Ansuul's Torment
         764 => "#F4A460", // Highland Sentinel
@@ -1092,7 +1095,7 @@ pub fn colour_from_set(set: &ItemSet) -> Color {
         | 413 | 425 // Spectral Cloak
         | 371 | 524 // Cruel Flurry
         => "#FFE4C4", // Arena Weapons
-        501 | 503 | 505 | 519 | 520 | 521 | 575 | 576 | 593 | 594 | 596 | 597 | 625 | 626 | 627 | 654 | 655 | 656 | 657 | 658 | 674 | 675 | 676 | 691 | 692 | 693 | 694 | 760 | 761 | 762 | 811 | 812 | 813 | 845 => "#FF8200", // Mythics
+        501 | 503 | 505 | 519 | 520 | 521 | 575 | 576 | 593 | 594 | 596 | 597 | 625 | 626 | 627 | 654 | 655 | 656 | 657 | 658 | 674 | 675 | 676 | 691 | 692 | 693 | 694 | 760 | 761 | 762 | 811 | 812 | 813 | 845 | 848 => "#FF8200", // Mythics
         999 => "#B2B2B2",
         _ => "#B2B2B2",
     };

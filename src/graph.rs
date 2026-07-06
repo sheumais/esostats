@@ -275,12 +275,12 @@ pub fn large_skill_pie_chart(props: &PieChartProps) -> Html {
     let height = props.height;
 
     let name = compute_title(&partitions, "Top 75 Most Used Skills (All Patches)");
-    let subtitle = format!("data from top 100 parses on every boss in every patch on esologs, normalised between patches");
+    let subtitle = format!("data from top 100 parses on every boss in every patch on esologs");
 
     let render_task = yew_hooks::use_async(async move {
         let renderer = WasmRenderer::new(width, height);
         let (chart_data, chart_colors) =
-            crate::data::top_n_skills_normalised_chart_vectors(&master_table, &partitions, top_n);
+            crate::data::top_n_skills_chart_vectors(&master_table, &partitions, top_n);
 
         let chart = build_large_chart_from_data(chart_data, chart_colors);
 
@@ -316,12 +316,12 @@ pub fn large_set_pie_chart(props: &PieChartProps) -> Html {
     let height = props.height;
 
     let name = compute_title(&partitions, "Top 50 Most Used Sets (All Patches)");
-    let subtitle = format!("data from top 100 parses on every boss in every patch on esologs, normalised between patches");
+    let subtitle = format!("data from top 100 parses on every boss in every patch on esologs");
 
     let render_task = yew_hooks::use_async(async move {
         let renderer = WasmRenderer::new(width, height);
         let (chart_data, chart_colors) =
-            crate::data::top_n_sets_normalised_chart_vectors(&master_table, &partitions, top_n);
+            crate::data::top_n_sets_chart_vectors(&master_table, &partitions, top_n);
 
         let chart = build_large_chart_from_data(chart_data, chart_colors);
 

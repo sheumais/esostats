@@ -62,6 +62,8 @@ pub fn app() -> Html {
     }
 }
 
+pub const UPDATE_NEWEST: u8 = 30;
+
 fn main() {
     yew::Renderer::<App>::new().render();
     // data::process_data_into_master_table_serialized()
